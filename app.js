@@ -22,6 +22,11 @@ io.on("connection", (socket) => {
   users.push(socket.id);
   io.emit("userConnected", users);
 
+  socket.on("sync", (payload) => {
+    addLog("Syncing data");
+    io.emit("sync", payload);
+  });
+
   socket.on("disconnect", (socket) => {
     addLog("a user disconnected");
     users = users.filter((user) => user != socket.id);
