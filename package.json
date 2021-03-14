@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node app",
-    "dev": "nodemon app"
+    "dev": "nodemon app",
+    "deploy": "git add --all && git commit -am 'deploy' && git pull && git push && docker build -t htetlinmaung/orangechannel . && docker push htetlinmaung/orangechannel"
   },
   "keywords": [],
   "author": "",
