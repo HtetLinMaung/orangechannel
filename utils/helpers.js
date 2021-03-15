@@ -1,7 +1,8 @@
-let { logs, subscribers } = require("../data");
+let { logs, subscribers, cacheEvents } = require("../data");
 const moment = require("moment");
 const uuid = require("uuid");
 const axios = require("axios");
+const { getSocketIO } = require("./socket");
 
 exports.addLog = (message, type = "normal") => {
   const timestamp = new Date().toISOString();
@@ -39,4 +40,11 @@ exports.broadcastToSubscribers = (type, data) => {
         console.log(log);
       });
   }
+};
+
+exports.emit = (roomId, event, payload) => {
+  getSocketIO().to(roomId).emit(event, payload);
+  const action = { type: event, payload, roomId };
+  cacheEvents.push(action);
+  this.broadcastToSubscribers("event", action);
 };

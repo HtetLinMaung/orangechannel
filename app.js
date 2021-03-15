@@ -2,8 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { initSocketIO } = require("./utils/socket");
-let { users } = require("./data");
-const { addLog } = require("./utils/helpers");
+let { users, rooms } = require("./data");
+const { addLog, emit } = require("./utils/helpers");
+const uuid = require("uuid");
 
 const PORT = process.env.PORT || 3000;
 
@@ -18,20 +19,54 @@ const server = app.listen(PORT, () =>
 const io = initSocketIO(server);
 
 io.on("connection", (socket) => {
-  addLog("a user connected");
-  users.push(socket.id);
-  io.emit("userConnected", users);
+  // socket.on("newRoom", (name) => {
+  //   const roomId = uuid.v4();
+  //   rooms.push({ id: roomId, name, users: [] });
+  //   addLog(`Room ${name} created`);
+  //   emit(roomId, "newRoom", rooms);
+  // });
 
-  socket.on("sync", (payload) => {
-    addLog("Syncing data");
-    io.emit("sync", payload);
+  socket.on("join", ({ userId, username, roomId }) => {
+    const room = rooms.find((v) => v.id == roomId);
+    socket.join(roomId);
+    addLog(`${username || "a user"} connected to ${room.name}`);
+    room.users.push({
+      userId,
+      username,
+      room,
+    });
+    emit(
+      roomId,
+      "userConnected",
+      users.filter((user) => user.roomId == roomId)
+    );
+  });
+
+  socket.on("leave", (userId, roomId) => {
+    const room = rooms.find((v) => v.id == roomId);
+    const user = rrom.users.find((v) => v.userId == userId);
+
+    addLog(`${user.username || "a user"} disconnected from ${room.name}`);
+    room.users = room.users.filter((user) => user.userId != userId);
+    socket.leave(roomId);
+
+    emit(
+      roomId,
+      "userDisconnected",
+      users.filter((user) => user.roomId == roomId)
+    );
+  });
+
+  socket.on("sync", (roomId, payload) => {
+    const room = rooms.find((v) => v.id == roomId);
+    addLog(`Syncing data to ${room.name}`);
+    emit(roomId, "sync", payload);
   });
 
   socket.on("disconnect", (socket) => {
-    addLog("a user disconnected");
-    users = users.filter((user) => user != socket.id);
-    io.emit("userDisconnected", users);
+    addLog(socket);
   });
 });
 
 app.use("/api/v1/socket", require("./routes/socket-routes"));
+app.use("/api/v1", require("./routes/data-routes"));
