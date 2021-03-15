@@ -23,10 +23,12 @@ io.on("connection", (socket) => {
     if (room) {
       socket.join(roomId);
       addLog(`${username || "a user"} connected to ${room.name}`);
-      room.users.push({
-        userId,
-        username,
-      });
+      if (room.users.find((user) => user.id == userId)) {
+        room.users.push({
+          userId,
+          username,
+        });
+      }
       emit(
         roomId,
         "userConnected",
