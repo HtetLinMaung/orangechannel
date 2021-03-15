@@ -28,33 +28,37 @@ io.on("connection", (socket) => {
 
   socket.on("join", ({ userId, username, roomId }) => {
     const room = rooms.find((v) => v.id == roomId);
-    socket.join(roomId);
-    addLog(`${username || "a user"} connected to ${room.name}`);
-    room.users.push({
-      userId,
-      username,
-      room,
-    });
-    emit(
-      roomId,
-      "userConnected",
-      users.filter((user) => user.roomId == roomId)
-    );
+    if (room) {
+      socket.join(roomId);
+      addLog(`${username || "a user"} connected to ${room.name}`);
+      room.users.push({
+        userId,
+        username,
+        room,
+      });
+      emit(
+        roomId,
+        "userConnected",
+        users.filter((user) => user.roomId == roomId)
+      );
+    }
   });
 
   socket.on("leave", (userId, roomId) => {
     const room = rooms.find((v) => v.id == roomId);
-    const user = rrom.users.find((v) => v.userId == userId);
+    const user = room.users.find((v) => v.userId == userId);
 
-    addLog(`${user.username || "a user"} disconnected from ${room.name}`);
-    room.users = room.users.filter((user) => user.userId != userId);
-    socket.leave(roomId);
+    if (user && room) {
+      addLog(`${user.username || "a user"} disconnected from ${room.name}`);
+      room.users = room.users.filter((user) => user.userId != userId);
+      socket.leave(roomId);
 
-    emit(
-      roomId,
-      "userDisconnected",
-      users.filter((user) => user.roomId == roomId)
-    );
+      emit(
+        roomId,
+        "userDisconnected",
+        users.filter((user) => user.roomId == roomId)
+      );
+    }
   });
 
   socket.on("sync", (roomId, payload) => {
