@@ -4,16 +4,6 @@ exports.logs = [];
 
 exports.cacheEvents = [];
 
-exports.rooms = [];
-// {
-//     roomId: 'uuid'
-//     roomName: 'test',
-//     users:['userId...']
-// }
+exports.rooms = []; // deprecated
 
 exports.users = [];
-// {
-//     userId: 'uuid',
-//     username: 'hlm',
-//     password: 'asdfjs;ldjf'
-// }

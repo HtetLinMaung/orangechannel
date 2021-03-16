@@ -2,10 +2,11 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { initSocketIO } = require("./utils/socket");
-let { users, rooms, cacheEvents } = require("./data");
-const { addLog, emit, broadcastToSubscribers } = require("./utils/helpers");
+let { users, cacheEvents } = require("./data");
+const { addLog, broadcastToSubscribers } = require("./utils/helpers");
 const uuid = require("uuid");
 const bcrypt = require("bcryptjs");
+const moment = require("moment");
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,20 +21,15 @@ const server = app.listen(PORT, () =>
 const io = initSocketIO(server);
 
 io.on("connection", (socket) => {
-  socket.emit("onConnected", (userId) => {
-    socket.join(userId);
+  socket.emit("onConnected", (socketId) => {
+    socket.join(socketId);
   });
 
   socket.on("init", (data, cb = () => {}) => {
     if (typeof cb != "function") {
       return socket.disconnect();
     }
-    if (
-      !data.hasOwnProperty("users") ||
-      typeof data.users != "array" ||
-      !data.hasOwnProperty("rooms") ||
-      typeof data.rooms != "array"
-    ) {
+    if (!data.hasOwnProperty("users") || typeof data.users != "array") {
       return cb({ code: 422, message: "Unprocessable Entity" });
     }
 
@@ -45,44 +41,25 @@ io.on("connection", (socket) => {
       }
     }
 
-    for (const room of data.rooms) {
-      for (const key of ["roomId", "roomName", "users"]) {
-        if (!Object.keys(room).includes(key)) {
-          return cb({ code: 422, message: "Unprocessable Entity" });
-        }
-      }
-      if (typeof room.users != "array") {
-        return cb({ code: 422, message: "Unprocessable Entity" });
-      }
-    }
-
     users = [...data.users];
-    rooms = [...data.rooms];
-    cb({ code: 200, users, rooms });
-  });
 
-  socket.on("newRoom", (roomName, cb = () => {}) => {
-    if (typeof cb != "function") {
-      return socket.disconnect();
-    }
-    const roomId = uuid.v4();
-    rooms.push({ roomId, roomName, users: [] });
-    addLog(`Room ${roomName} created`);
-    cb({ code: 201, roomId });
-    io.emit("newRoom", rooms);
-  });
+    data.schedules.forEach(({ action, delay, sockets, date }) => {
+      const newDelay =
+        delay * 1000 + moment(date).valueOf() - moment().valueOf();
+      setTimeout(() => {
+        if (sockets.length) {
+          io.to(sockets).emit(action.event, action.payload);
+        } else {
+          io.emit(action.event, action.payload);
+        }
+        addLog(
+          `Event ${action.event} emitted to ${sockets} with payload ${action.payload}`
+        );
+        cacheEvents.push({ type: action.event, payload: action.payload });
+      }, newDelay);
+    });
 
-  socket.on("deleteRoom", (roomId, cb = () => {}) => {
-    if (typeof cb != "function") {
-      return socket.disconnect();
-    }
-    const room = rooms.find((v) => v.roomId == roomId);
-    if (!room) {
-      return cb({ code: 404, message: "Not Found" });
-    }
-    addLog(`Room ${room.roomName} removed`);
-    cb({ code: 204, message: "Deleted" });
-    io.emit("deleteRoom", rooms);
+    cb({ code: 200, users });
   });
 
   socket.on(
@@ -113,78 +90,41 @@ io.on("connection", (socket) => {
     }
   );
 
-  // must call from client
-  socket.on("join", (roomId, userId, cb = () => {}) => {
+  socket.on("sync", (sockets, payload, cb = () => {}) => {
     if (typeof cb != "function") {
       return socket.disconnect();
     }
-    const room = rooms.find((v) => v.roomId == roomId);
-    const user = users.find((v) => v.userId == userId);
-    if (!room || !user) {
-      return cb({ code: "404", message: "Not Found" });
+    if (typeof sockets != "array") {
+      return cb({ code: 422, message: "Unprocessable Entity" });
     }
-    socket.join(roomId);
-    if (!room.users.find((user) => user.userId == userId)) {
-      room.users.push(userId);
-    }
-    addLog(`${user.username || "a user"} disconnected from ${room.roomName}`);
-    io.emit("userConnected", rooms);
-    cb({ code: 200, message: "Joined" });
+
+    io.to(sockets).emit("sync", payload);
+    addLog(`Syncing data to ${sockets}`);
+    cacheEvents.push({ type: "sync", payload });
+    cb({ code: 200, message: "Success" });
   });
 
-  // must call from client
-  socket.on("leave", (roomId, userId, cb = () => {}) => {
+  socket.on("custom", (action, { delay = 0, sockets = [] }, cb = () => {}) => {
     if (typeof cb != "function") {
       return socket.disconnect();
     }
-    const room = rooms.find((v) => v.roomId == roomId);
-    const user = users.find((v) => v.userId == userId);
-
-    if (!room || !user) {
-      return cb({ code: 404, message: "Not Found" });
+    try {
+      setTimeout(() => {
+        if (sockets.length) {
+          io.to(sockets).emit(action.event, action.payload);
+        } else {
+          io.emit(action.event, action.payload);
+        }
+        addLog(
+          `Event ${action.event} emitted to ${sockets} with payload ${action.payload}`
+        );
+        cacheEvents.push({ type: action.event, payload: action.payload });
+        cb({ code: 200, message: "Custom event emitted" });
+      }, delay * 1000);
+    } catch (err) {
+      cb({ code: 500, message: "Server Error!" });
     }
-    socket.leave(roomId);
-    room.users = room.users.filter((u) => u.userId != userId);
-    io.emit("userDisconnected", rooms);
-    cacheEvents.push({
-      type: "userDisconnected",
-      payload: rooms,
-    });
-    cb({ code: 200, message: "Leaved" });
   });
-
-  socket.on("sync", (roomId, payload) => {
-    const room = rooms.find((v) => v.roomId == roomId);
-    addLog(`Syncing data to ${room.roomName}`);
-    emit(roomId, "sync", payload);
-  });
-
-  socket.on(
-    "custom",
-    (action, { delay = 0, roomId = null, date }, cb = () => {}) => {
-      if (typeof cb != "function") {
-        return socket.disconnect();
-      }
-      try {
-        setTimeout(() => {
-          if (roomId != null) {
-            io.to(roomId).emit(action.event, action.payload);
-          } else {
-            io.emit(action.event, action.payload);
-          }
-          addLog(
-            `Event ${action.event} emitted ${
-              roomId != null ? "to " + roomId : ""
-            } with payload ${action.payload}`
-          );
-          cacheEvents.push({ type: action.event, payload: action.payload });
-          cb({ code: 200, message: "Custom event emitted" });
-        }, delay * 1000);
-      } catch (err) {
-        cb({ code: 500, message: "Server Error!" });
-      }
-    }
-  );
 
   socket.on("broadcast", (payload) => {
     // todo: safe guard broadcast channel
