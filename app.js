@@ -25,10 +25,16 @@ io.on("connection", (socket) => {
     socket.join(socketId);
   });
 
-  socket.on("init", (data, cb = () => {}) => {
+  socket.on("init", (data, auth, cb = () => {}) => {
     if (typeof cb != "function") {
       return socket.disconnect();
     }
+    // if (
+    //   auth.orgId != process.env.ORG_ID ||
+    //   auth.orgPwd != process.env.ORG_PWD
+    // ) {
+    //   return cb({ code: 402, message: "Unauthorized" });
+    // }
     if (!data.hasOwnProperty("users") || typeof data.users != "array") {
       return cb({ code: 422, message: "Unprocessable Entity" });
     }
