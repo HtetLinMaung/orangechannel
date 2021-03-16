@@ -5,7 +5,7 @@ const { initSocketIO } = require("./utils/socket");
 let { users, rooms, cacheEvents } = require("./data");
 const { addLog, emit, broadcastToSubscribers } = require("./utils/helpers");
 const uuid = require("uuid");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 const PORT = process.env.PORT || 3000;
 
