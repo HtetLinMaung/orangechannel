@@ -2,11 +2,12 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { initSocketIO } = require("./utils/socket");
-let { users, cacheEvents } = require("./data");
+let { users, cacheEvents, serverName } = require("./data");
 const { addLog, broadcastToSubscribers } = require("./utils/helpers");
 const uuid = require("uuid");
 const bcrypt = require("bcryptjs");
 const moment = require("moment");
+const os = require("os");
 
 const PORT = process.env.PORT || 3000;
 
@@ -15,26 +16,28 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const server = app.listen(PORT, () =>
-  console.log(`Server listening on port ${PORT}`)
-);
+const server = app.listen(PORT, () => {
+  // const networkInterfaces = os.networkInterfaces();
+  // console.log(networkInterfaces);
+  console.log(`${serverName} listening on port ${PORT}`);
+});
 const io = initSocketIO(server);
 
 io.on("connection", (socket) => {
-  socket.emit("onConnected", (socketId) => {
-    socket.join(socketId);
-  });
+  socket.emit(
+    "onConnected",
+    { socketId: socket.id, serverName },
+    (socketId = socket.id, any = {}) => {
+      socket.join(socketId);
+      users.push({ ...any, socketId });
+    }
+  );
 
   socket.on("init", (data, auth, cb = () => {}) => {
     if (typeof cb != "function") {
       return socket.disconnect();
     }
-    // if (
-    //   auth.orgId != process.env.ORG_ID ||
-    //   auth.orgPwd != process.env.ORG_PWD
-    // ) {
-    //   return cb({ code: 402, message: "Unauthorized" });
-    // }
+
     if (!data.hasOwnProperty("users") || typeof data.users != "array") {
       return cb({ code: 422, message: "Unprocessable Entity" });
     }
