@@ -24,12 +24,15 @@ const server = app.listen(PORT, () => {
 const io = initSocketIO(server);
 
 io.on("connection", (socket) => {
-  socket.emit("onConnected", ({ socketId = socket.id, data = {} }) => {
-    socket.join(socketId);
-    addLog(`${socketId} Connected`);
-    users.push({ ...data, socketId });
-    return { socketId, serverName };
-  });
+  socket.emit(
+    "onConnected",
+    { socketId: socket.id, serverName },
+    ({ socketId = socket.id, data = {} }) => {
+      socket.join(socketId);
+      addLog(`${socketId} Connected`);
+      users.push({ ...data, socketId });
+    }
+  );
 
   socket.on("init", (data, auth, cb = () => {}) => {
     if (typeof cb != "function") {
